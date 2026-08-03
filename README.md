@@ -1,6 +1,7 @@
 # 📚 Flashcard Generator
 
-Upload a PDF (lecture notes, textbook chapter, etc.) and get back AI-generated flashcards and a multiple-choice quiz to study from — built with Streamlit and Google's Gemini API.
+Upload a PDF (lecture notes, textbook chapter, etc.) and get back AI-generated flashcards and a MCQs quiz to study from. 
+Built with Streamlit and Google's Gemini API.
 
 **Live app:** https://flashcard-app-zn6f6svxcfqdaepxzagjgu.streamlit.app
 
@@ -10,12 +11,12 @@ Upload a PDF (lecture notes, textbook chapter, etc.) and get back AI-generated f
 - Auto-generates flashcards (question + explanation) and MCQ quizzes
 - Adjustable number of items (5–20)
 - Score tracking as you go through the quiz
-- Runs entirely in-session — nothing is stored after you close the tab
+- Runs entirely in-session as nothing is stored after you close the tab
 
 ## Tech stack
 
 - [Streamlit](https://streamlit.io) — UI and app framework
-- [Google Gen AI SDK](https://ai.google.dev) (`gemini-3.5-flash-lite`) — content generation
+- [Google Gen AI SDK](https://ai.google.dev) (`gemini-3.5-flash-lite`) - content generation
 - [pypdf](https://pypi.org/project/pypdf/) — PDF text extraction
 
 ## Running locally
@@ -40,7 +41,9 @@ streamlit run app.py
 
 ## Notes
 
-This is an early prototype — things may break. Currently running on Gemini's free tier, so there's a shared daily request limit across everyone using the live link.
+This is an early prototype and I understand that things may break. Currently running on Gemini's free tier, so there's a shared daily request limit across everyone using the live link.
+
+Do let me know incase you see the app breaking.
 
 ## License
 
