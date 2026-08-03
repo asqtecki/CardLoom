@@ -89,7 +89,7 @@ Study material:
     for attempt in range(max_attempts):
         try:
             response = client.models.generate_content(
-                model="gemini-3.6-flash",
+                model="gemini-3.5-flash-lite",
                 contents=prompt,
             )
             break
