@@ -10,9 +10,6 @@ st.set_page_config(page_title="Flashcard Generator", page_icon="📚", layout="c
 st.title("📚 Flashcard Generator")
 st.caption("Upload lecture notes or a textbook PDF, get flashcards and a quiz to study from.")
 
-# --- API Key ---
-# When deployed, this reads from Streamlit secrets (st.secrets) so testers
-# don't need their own key. Locally, it falls back to typing it in the sidebar.
 try:
     api_key = st.secrets["GEMINI_API_KEY"]
 except (KeyError, FileNotFoundError, st.errors.StreamlitSecretNotFoundError):
@@ -30,7 +27,6 @@ st.sidebar.caption(
     "note it down and we'll fix it."
 )
 
-# --- Basic usage limits (prevents one person from hammering the shared key) ---
 MAX_PDF_SIZE_MB = 5
 MAX_GENERATIONS_PER_SESSION = 5
 
@@ -80,9 +76,6 @@ Return ONLY valid JSON, no other text before or after, in this exact structure:
 Study material:
 {text}
 """
-    # The model occasionally returns 503 UNAVAILABLE when Google's servers
-    # are under heavy load. This is transient and usually clears within
-    # seconds, so retry a few times with a short backoff before giving up.
     max_attempts = 4
     last_error = None
     response = None
@@ -96,7 +89,7 @@ Study material:
         except genai_errors.ServerError as e:
             last_error = e
             if attempt < max_attempts - 1:
-                time.sleep(2 * (attempt + 1))  # 2s, 4s, 6s
+                time.sleep(2 * (attempt + 1))
     if response is None:
         raise RuntimeError(
             "Gemini is currently overloaded (503) even after retrying. "
@@ -136,9 +129,6 @@ if st.button("Generate Study Material", type="primary"):
                 else:
                     result = generate_study_material(text, num_items, api_key)
 
-                    # Clear out old quiz widget state (quiz_q_0, quiz_q_1, ...)
-                    # so a new PDF's quiz doesn't inherit locked-in answers
-                    # from the previous one.
                     for k in list(st.session_state.keys()):
                         if k.startswith("quiz_q_"):
                             del st.session_state[k]
@@ -160,12 +150,6 @@ if st.button("Generate Study Material", type="primary"):
 if st.session_state.flashcards or st.session_state.mcqs:
     st.divider()
 
-    # --- Tab switcher ---
-    # NOTE: st.tabs() does NOT reliably keep its active tab across reruns
-    # triggered by a widget inside it (e.g. selecting a quiz answer) — it can
-    # silently snap back to the first tab. A widget bound to session_state
-    # (like this one) does not have that problem, since Streamlit persists
-    # widget state across reruns by key.
     st.radio(
         "View",
         options=["📇 Flashcards", "✅ Quiz (MCQ)"],
@@ -198,7 +182,7 @@ if st.session_state.flashcards or st.session_state.mcqs:
                     st.session_state.current_card += 1
                     st.rerun()
 
-    else:  # Quiz tab
+    else:
         mcqs = st.session_state.mcqs
         if not mcqs:
             st.info("No quiz questions generated.")
@@ -206,14 +190,6 @@ if st.session_state.flashcards or st.session_state.mcqs:
             for i, q in enumerate(mcqs):
                 st.markdown(f"**{i + 1}. {q['question']}**")
                 key = f"quiz_q_{i}"
-                # Source of truth is quiz_answers (a plain dict), NOT the
-                # radio's own widget-keyed state. Streamlit deletes a
-                # widget's session_state entry whenever that widget isn't
-                # rendered in a script run (e.g. while the Flashcards tab
-                # is showing), so relying on st.session_state[key] here
-                # would forget the answer every time you switch tabs away
-                # and back. quiz_answers survives that because it's an
-                # ordinary dict, not tied to any widget.
                 is_locked = i in st.session_state.quiz_answers
                 selected = st.radio(
                     "Choose one:",
