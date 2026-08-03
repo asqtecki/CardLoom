@@ -15,9 +15,9 @@ Built with Streamlit and Google's Gemini API.
 
 ## Tech stack
 
-- [Streamlit](https://streamlit.io) — UI and app framework
-- [Google Gen AI SDK](https://ai.google.dev) (`gemini-3.5-flash-lite`) - content generation
-- [pypdf](https://pypi.org/project/pypdf/) — PDF text extraction
+- [Streamlit](https://streamlit.io): UI and app framework
+- [Google Gen AI SDK](https://ai.google.dev) (`gemini-3.5-flash-lite`): content generation
+- [pypdf](https://pypi.org/project/pypdf/): PDF text extraction
 
 ## Running locally
 
