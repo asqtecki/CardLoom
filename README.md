@@ -44,7 +44,3 @@ streamlit run app.py
 This is an early prototype and I understand that things may break. Currently running on Gemini's free tier, so there's a shared daily request limit across everyone using the live link.
 
 Do let me know incase you see the app breaking.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
