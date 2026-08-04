@@ -45,9 +45,6 @@ if "quiz_answers" not in st.session_state:
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "📇 Flashcards"
 
-# Executor is created once per session and reused across reruns —
-# creating it at module level would spin up new threads on every
-# click/rerun and leak the old ones.
 if "executor" not in st.session_state:
     st.session_state.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
@@ -114,6 +111,14 @@ Study material:
     raw = response.text.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
+
+
+def lock_quiz_answer(i, key):
+    # Fires on the backend before the script redraws, so the answer
+    # is locked in the SAME pass that renders the disabled widget —
+    # no second rerun, no gap where the choice can be changed.
+    if i not in st.session_state.quiz_answers:
+        st.session_state.quiz_answers[i] = st.session_state[key]
 
 
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
@@ -191,11 +196,9 @@ if st.session_state.flashcards or st.session_state.mcqs:
             with col1:
                 if st.button("⬅ Previous") and idx > 0:
                     st.session_state.current_card -= 1
-                    st.rerun()
             with col3:
                 if st.button("Next ➡") and idx < len(cards) - 1:
                     st.session_state.current_card += 1
-                    st.rerun()
 
     else:
         mcqs = st.session_state.mcqs
@@ -206,18 +209,17 @@ if st.session_state.flashcards or st.session_state.mcqs:
                 st.markdown(f"**{i + 1}. {q['question']}**")
                 key = f"quiz_q_{i}"
                 is_locked = i in st.session_state.quiz_answers
-                selected = st.radio(
+                st.radio(
                     "Choose one:",
                     options=range(len(q["options"])),
                     format_func=lambda x, opts=q["options"]: opts[x],
                     key=key,
                     index=st.session_state.quiz_answers.get(i),
                     disabled=is_locked,
+                    on_change=lock_quiz_answer,
+                    args=(i, key),
                     label_visibility="collapsed",
                 )
-                if not is_locked and selected is not None:
-                    st.session_state.quiz_answers[i] = selected
-                    st.rerun()
 
                 if is_locked:
                     locked_answer = st.session_state.quiz_answers[i]
