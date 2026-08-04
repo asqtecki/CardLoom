@@ -240,6 +240,21 @@ if st.session_state.flashcards or st.session_state.mcqs:
         if not mcqs:
             st.info("No quiz questions generated.")
         else:
+            def render_option_box(text, kind):
+                colors = {
+                    "correct": ("#d4edda", "#155724", "#a3d9b1"),
+                    "incorrect": ("#f8d7da", "#721c24", "#eda6ad"),
+                    "neutral": ("#f0f2f6", "#31333f", "#d5d8de"),
+                }
+                bg, fg, border = colors[kind]
+                st.markdown(
+                    f"""<div style="background-color:{bg}; color:{fg};
+                    border:1px solid {border}; border-radius:8px;
+                    padding:0.55rem 1rem; margin-bottom:0.5rem; font-size:1rem;">
+                    {text}</div>""",
+                    unsafe_allow_html=True,
+                )
+
             for i, q in enumerate(mcqs):
                 st.markdown(f"**{i + 1}. {q['question']}**")
                 is_locked = i in st.session_state.quiz_answers
@@ -248,15 +263,16 @@ if st.session_state.flashcards or st.session_state.mcqs:
                     for opt_idx, opt_text in enumerate(q["options"]):
                         if st.button(opt_text, key=f"quiz_q_{i}_opt_{opt_idx}", use_container_width=True):
                             st.session_state.quiz_answers[i] = opt_idx
+                            st.rerun()
                 else:
                     selected = st.session_state.quiz_answers[i]
                     for opt_idx, opt_text in enumerate(q["options"]):
                         if opt_idx == q["correct_index"]:
-                            st.markdown(f"✅ **{opt_text}**")
+                            render_option_box(opt_text, "correct")
                         elif opt_idx == selected:
-                            st.markdown(f"❌ ~~{opt_text}~~")
+                            render_option_box(opt_text, "incorrect")
                         else:
-                            st.markdown(f"{opt_text}")
+                            render_option_box(opt_text, "neutral")
 
                     if selected == q["correct_index"]:
                         st.success("Correct!")
