@@ -145,8 +145,12 @@ Study material:
 
 
 def lock_quiz_answer(i, key):
-    if i not in st.session_state.quiz_answers:
-        st.session_state.quiz_answers[i] = st.session_state[key]
+    if i in st.session_state.quiz_answers:
+        return
+    selected = st.session_state[key]
+    if selected == 0:
+        return  # placeholder — no real answer chosen yet
+    st.session_state.quiz_answers[i] = selected - 1  # shift back to real option index
 
 
 def run_generation(uploaded_file, num_items, api_key):
@@ -250,20 +254,24 @@ if st.session_state.flashcards or st.session_state.mcqs:
                 key = f"quiz_q_{i}"
                 is_locked = i in st.session_state.quiz_answers
 
-                radio_kwargs = dict(
-                    options=range(len(q["options"])),
-                    format_func=lambda x, opts=q["options"]: opts[x],
+                # Real options shifted by 1; index 0 is a placeholder meaning
+                # "nothing chosen yet" so no option looks pre-selected.
+                display_options = ["— Choose an answer —"] + q["options"]
+
+                locked_value = st.session_state.quiz_answers.get(i)
+                default_index = (locked_value + 1) if locked_value is not None else 0
+
+                st.radio(
+                    "Choose one:",
+                    options=range(len(display_options)),
+                    format_func=lambda x, opts=display_options: opts[x],
                     key=key,
+                    index=default_index,
                     disabled=is_locked,
                     on_change=lock_quiz_answer,
                     args=(i, key),
                     label_visibility="collapsed",
                 )
-                locked_value = st.session_state.quiz_answers.get(i)
-                if locked_value is not None:
-                    radio_kwargs["index"] = locked_value  # only pass index when there's a real answer
-
-                st.radio("Choose one:", **radio_kwargs)
 
                 if is_locked:
                     locked_answer = st.session_state.quiz_answers[i]
