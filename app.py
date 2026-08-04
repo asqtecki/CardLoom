@@ -27,7 +27,7 @@ st.sidebar.caption(
     "note it down and we'll fix it."
 )
 
-MAX_PDF_SIZE_MB = 5
+MAX_PDF_SIZE_MB = 200
 MAX_GENERATIONS_PER_SESSION = 5
 
 if "generation_count" not in st.session_state:
