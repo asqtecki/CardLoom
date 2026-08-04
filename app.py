@@ -4,6 +4,7 @@ from google import genai
 from google.genai import errors as genai_errors
 import json
 import time
+import concurrent.futures
 
 st.set_page_config(page_title="Flashcard Generator", page_icon="📚", layout="centered")
 
@@ -76,24 +77,33 @@ Return ONLY valid JSON, no other text before or after, in this exact structure:
 Study material:
 {text}
 """
+    REQUEST_TIMEOUT_SECONDS = 45
     max_attempts = 4
     last_error = None
     response = None
     for attempt in range(max_attempts):
         try:
-            response = client.models.generate_content(
-                model="gemini-3.5-flash-lite",
-                contents=prompt,
-            )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(
+                    client.models.generate_content,
+                    model="gemini-3.5-flash-lite",
+                    contents=prompt,
+                )
+                response = future.result(timeout=REQUEST_TIMEOUT_SECONDS)
             break
         except genai_errors.ServerError as e:
             last_error = e
             if attempt < max_attempts - 1:
                 time.sleep(2 * (attempt + 1))
+        except concurrent.futures.TimeoutError as e:
+            last_error = e
+            if attempt < max_attempts - 1:
+                time.sleep(2 * (attempt + 1))
     if response is None:
         raise RuntimeError(
-            "Gemini is currently overloaded (503) even after retrying. "
-            "This is on Google's end — please try again in a minute."
+            "Gemini didn't respond in time, even after retrying. This is "
+            "usually a temporary connection stall on Google's end — please "
+            "try again."
         ) from last_error
 
     raw = response.text.strip()
