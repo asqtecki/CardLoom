@@ -32,7 +32,6 @@ st.sidebar.caption(
 MAX_PDF_SIZE_MB = 200
 MAX_GENERATIONS_PER_SESSION = 5
 
-# Tried in order. If one stalls or is dead/deprecated, we fall back to the next.
 MODEL_FALLBACK_CHAIN = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
 
 if "generation_count" not in st.session_state:
@@ -49,7 +48,7 @@ if "quiz_answers" not in st.session_state:
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "📇 Flashcards"
 if "last_inputs" not in st.session_state:
-    st.session_state.last_inputs = None  # (uploaded_file, num_items) for the Retry button
+    st.session_state.last_inputs = None
 
 if "executor" not in st.session_state:
     st.session_state.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
@@ -117,20 +116,18 @@ Study material:
                 used_model = model
                 break
             except genai_errors.ClientError as e:
-                # e.g. 404 model not found / deprecated — retrying the same
-                # model won't help, skip straight to the next one in the chain
                 last_error = e
                 break
             except (genai_errors.ServerError, concurrent.futures.TimeoutError) as e:
                 last_error = e
                 _fresh_executor()
                 if attempt < ATTEMPTS_PER_MODEL - 1:
-                    time.sleep(1.5 * (attempt + 1))  # backoff before retrying same model
+                    time.sleep(1.5 * (attempt + 1))
             except Exception as e:
                 last_error = e
                 break
         if response is not None:
-            break  # got a response, stop trying other models
+            break
 
     elapsed = time.monotonic() - start
     if response is None:
@@ -181,7 +178,7 @@ def run_generation(uploaded_file, num_items, api_key):
             st.error("The AI response wasn't valid JSON. Try again — this happens occasionally.")
         except Exception as e:
             st.error(f"Something went wrong: {e}")
-            st.session_state.last_inputs = (uploaded_file, num_items)  # enables Retry button
+            st.session_state.last_inputs = (uploaded_file, num_items)
 
 
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
@@ -252,17 +249,21 @@ if st.session_state.flashcards or st.session_state.mcqs:
                 st.markdown(f"**{i + 1}. {q['question']}**")
                 key = f"quiz_q_{i}"
                 is_locked = i in st.session_state.quiz_answers
-                st.radio(
-                    "Choose one:",
+
+                radio_kwargs = dict(
                     options=range(len(q["options"])),
                     format_func=lambda x, opts=q["options"]: opts[x],
                     key=key,
-                    index=st.session_state.quiz_answers.get(i),
                     disabled=is_locked,
                     on_change=lock_quiz_answer,
                     args=(i, key),
                     label_visibility="collapsed",
                 )
+                locked_value = st.session_state.quiz_answers.get(i)
+                if locked_value is not None:
+                    radio_kwargs["index"] = locked_value  # only pass index when there's a real answer
+
+                st.radio("Choose one:", **radio_kwargs)
 
                 if is_locked:
                     locked_answer = st.session_state.quiz_answers[i]
