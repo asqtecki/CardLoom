@@ -80,8 +80,10 @@ Return ONLY valid JSON, no other text before or after, in this exact structure:
 Study material:
 {text}
 """
-    REQUEST_TIMEOUT_SECONDS = 45
-    max_attempts = 4
+    # TEMP DEBUG SETTINGS: shortened so we don't wait ~3 min to see the real error.
+    # Revert to 45 / 4 once we know what's actually failing.
+    REQUEST_TIMEOUT_SECONDS = 15
+    max_attempts = 1
     last_error = None
     response = None
     for attempt in range(max_attempts):
@@ -101,11 +103,16 @@ Study material:
             last_error = e
             if attempt < max_attempts - 1:
                 time.sleep(2 * (attempt + 1))
+        except Exception as e:
+            # TEMP DEBUG: catch anything else too, so it's not silently
+            # falling outside these except blocks and surfacing as a
+            # generic unrelated error.
+            last_error = e
+            break
     if response is None:
         raise RuntimeError(
-            "Gemini didn't respond in time, even after retrying. This is "
-            "usually a temporary connection stall on Google's end — please "
-            "try again."
+            f"Gemini didn't respond in time, even after retrying. "
+            f"Underlying error: {type(last_error).__name__}: {last_error}"
         ) from last_error
 
     raw = response.text.strip()
@@ -114,9 +121,6 @@ Study material:
 
 
 def lock_quiz_answer(i, key):
-    # Fires on the backend before the script redraws, so the answer
-    # is locked in the SAME pass that renders the disabled widget —
-    # no second rerun, no gap where the choice can be changed.
     if i not in st.session_state.quiz_answers:
         st.session_state.quiz_answers[i] = st.session_state[key]
 
