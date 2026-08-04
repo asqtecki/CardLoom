@@ -3,7 +3,7 @@
 Upload a PDF (lecture notes, textbook chapter, etc.) and get back AI-generated flashcards and a MCQs quiz to study from. 
 Built with Streamlit and Google's Gemini API.
 
-**Live app:** https://flashcard-app-zn6f6svxcfqdaepxzagjgu.streamlit.app
+**Live app:** https://cardloomdrv.streamlit.app/
 
 ## Features
 
