@@ -32,8 +32,8 @@ st.sidebar.caption(
 MAX_PDF_SIZE_MB = 200
 MAX_GENERATIONS_PER_SESSION = 5
 
-# Tried in order. If the first stalls repeatedly, we fall back to the next.
-MODEL_FALLBACK_CHAIN = ["gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
+# Tried in order. If one stalls or is dead/deprecated, we fall back to the next.
+MODEL_FALLBACK_CHAIN = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"]
 
 if "generation_count" not in st.session_state:
     st.session_state.generation_count = 0
@@ -49,7 +49,7 @@ if "quiz_answers" not in st.session_state:
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "📇 Flashcards"
 if "last_inputs" not in st.session_state:
-    st.session_state.last_inputs = None  # (uploaded_file bytes hash, num_items) for the Retry button
+    st.session_state.last_inputs = None  # (uploaded_file, num_items) for the Retry button
 
 if "executor" not in st.session_state:
     st.session_state.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
@@ -116,6 +116,11 @@ Study material:
                 response = _call_gemini_once(prompt, model, api_key, REQUEST_TIMEOUT_SECONDS)
                 used_model = model
                 break
+            except genai_errors.ClientError as e:
+                # e.g. 404 model not found / deprecated — retrying the same
+                # model won't help, skip straight to the next one in the chain
+                last_error = e
+                break
             except (genai_errors.ServerError, concurrent.futures.TimeoutError) as e:
                 last_error = e
                 _fresh_executor()
@@ -131,7 +136,7 @@ Study material:
     if response is None:
         raise RuntimeError(
             f"Gemini didn't respond after trying {len(MODEL_FALLBACK_CHAIN)} models "
-            f"({elapsed:.1f}s total). This is a known instability on Google's side, "
+            f"({elapsed:.1f}s total). This may be a known instability on Google's side, "
             f"not a bug in this app — click Retry below in a moment. "
             f"Underlying error: {type(last_error).__name__}: {last_error}"
         ) from last_error
