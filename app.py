@@ -6,6 +6,8 @@ import json
 import time
 import concurrent.futures
 
+_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
 st.set_page_config(page_title="Flashcard Generator", page_icon="📚", layout="centered")
 
 st.title("📚 Flashcard Generator")
@@ -83,13 +85,12 @@ Study material:
     response = None
     for attempt in range(max_attempts):
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    client.models.generate_content,
-                    model="gemini-3.5-flash-lite",
-                    contents=prompt,
-                )
-                response = future.result(timeout=REQUEST_TIMEOUT_SECONDS)
+            future = _executor.submit(
+                client.models.generate_content,
+                model="gemini-3.5-flash-lite",
+                contents=prompt,
+            )
+            response = future.result(timeout=REQUEST_TIMEOUT_SECONDS)
             break
         except genai_errors.ServerError as e:
             last_error = e
