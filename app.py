@@ -6,8 +6,6 @@ import json
 import time
 import concurrent.futures
 
-_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
-
 st.set_page_config(page_title="Flashcard Generator", page_icon="📚", layout="centered")
 
 st.title("📚 Flashcard Generator")
@@ -47,6 +45,12 @@ if "quiz_answers" not in st.session_state:
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "📇 Flashcards"
 
+# Executor is created once per session and reused across reruns —
+# creating it at module level would spin up new threads on every
+# click/rerun and leak the old ones.
+if "executor" not in st.session_state:
+    st.session_state.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
 
 def extract_text_from_pdf(uploaded_file, max_chars=15000):
     reader = pypdf.PdfReader(uploaded_file)
@@ -85,7 +89,7 @@ Study material:
     response = None
     for attempt in range(max_attempts):
         try:
-            future = _executor.submit(
+            future = st.session_state.executor.submit(
                 client.models.generate_content,
                 model="gemini-3.5-flash-lite",
                 contents=prompt,
