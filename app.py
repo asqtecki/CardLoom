@@ -32,6 +32,9 @@ st.sidebar.caption(
 MAX_PDF_SIZE_MB = 200
 MAX_GENERATIONS_PER_SESSION = 5
 
+# Tried in order. If the first stalls repeatedly, we fall back to the next.
+MODEL_FALLBACK_CHAIN = ["gemini-3.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash"]
+
 if "generation_count" not in st.session_state:
     st.session_state.generation_count = 0
 
@@ -45,6 +48,8 @@ if "quiz_answers" not in st.session_state:
     st.session_state.quiz_answers = {}
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "📇 Flashcards"
+if "last_inputs" not in st.session_state:
+    st.session_state.last_inputs = None  # (uploaded_file bytes hash, num_items) for the Retry button
 
 if "executor" not in st.session_state:
     st.session_state.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
@@ -58,6 +63,24 @@ def extract_text_from_pdf(uploaded_file, max_chars=15000):
         if len(text) > max_chars:
             break
     return text[:max_chars]
+
+
+def _fresh_executor():
+    st.session_state.executor.shutdown(wait=False, cancel_futures=True)
+    st.session_state.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
+
+def _call_gemini_once(prompt, model, api_key, timeout_seconds):
+    client = genai.Client(api_key=api_key)
+    future = st.session_state.executor.submit(
+        client.models.generate_content,
+        model=model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_level="minimal")
+        ),
+    )
+    return future.result(timeout=timeout_seconds)
 
 
 def generate_study_material(text, num_items, api_key):
@@ -80,46 +103,40 @@ Return ONLY valid JSON, no other text before or after, in this exact structure:
 Study material:
 {text}
 """
-    REQUEST_TIMEOUT_SECONDS = 30
-    max_attempts = 3
+    REQUEST_TIMEOUT_SECONDS = 25
+    ATTEMPTS_PER_MODEL = 2
     last_error = None
     response = None
-    attempt = 0
+    used_model = None
     start = time.monotonic()
 
-    for attempt in range(max_attempts):
-        client = genai.Client(api_key=api_key)
-        try:
-            future = st.session_state.executor.submit(
-                client.models.generate_content,
-                model="gemini-3.5-flash-lite",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_level="minimal")
-                ),
-            )
-            response = future.result(timeout=REQUEST_TIMEOUT_SECONDS)
-            break
-        except (genai_errors.ServerError, concurrent.futures.TimeoutError) as e:
-            last_error = e
-            st.session_state.executor.shutdown(wait=False, cancel_futures=True)
-            st.session_state.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
-            if attempt < max_attempts - 1:
-                time.sleep(1)
-        except Exception as e:
-            last_error = e
-            break
+    for model in MODEL_FALLBACK_CHAIN:
+        for attempt in range(ATTEMPTS_PER_MODEL):
+            try:
+                response = _call_gemini_once(prompt, model, api_key, REQUEST_TIMEOUT_SECONDS)
+                used_model = model
+                break
+            except (genai_errors.ServerError, concurrent.futures.TimeoutError) as e:
+                last_error = e
+                _fresh_executor()
+                if attempt < ATTEMPTS_PER_MODEL - 1:
+                    time.sleep(1.5 * (attempt + 1))  # backoff before retrying same model
+            except Exception as e:
+                last_error = e
+                break
+        if response is not None:
+            break  # got a response, stop trying other models
 
     elapsed = time.monotonic() - start
     if response is None:
         raise RuntimeError(
-            f"Gemini didn't respond after {max_attempts} attempts ({elapsed:.1f}s total). "
-            f"This looks like a known instability in Gemini's API under load, not a bug in "
-            f"this app — try again in a minute. "
+            f"Gemini didn't respond after trying {len(MODEL_FALLBACK_CHAIN)} models "
+            f"({elapsed:.1f}s total). This is a known instability on Google's side, "
+            f"not a bug in this app — click Retry below in a moment. "
             f"Underlying error: {type(last_error).__name__}: {last_error}"
         ) from last_error
 
-    st.sidebar.caption(f"Debug: generation took {elapsed:.1f}s, attempt {attempt + 1}")
+    st.sidebar.caption(f"Debug: generation took {elapsed:.1f}s using {used_model}")
     raw = response.text.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
@@ -128,6 +145,38 @@ Study material:
 def lock_quiz_answer(i, key):
     if i not in st.session_state.quiz_answers:
         st.session_state.quiz_answers[i] = st.session_state[key]
+
+
+def run_generation(uploaded_file, num_items, api_key):
+    with st.spinner("Reading PDF and generating flashcards + quiz... this can take up to a couple minutes"):
+        try:
+            text = extract_text_from_pdf(uploaded_file)
+            if len(text.strip()) < 50:
+                st.error(
+                    "Couldn't extract readable text from this PDF. "
+                    "It might be scanned/image-based rather than real text."
+                )
+                return
+            result = generate_study_material(text, num_items, api_key)
+
+            for k in list(st.session_state.keys()):
+                if k.startswith("quiz_q_"):
+                    del st.session_state[k]
+
+            st.session_state.flashcards = result.get("flashcards", [])
+            st.session_state.mcqs = result.get("mcqs", [])
+            st.session_state.current_card = 0
+            st.session_state.quiz_answers = {}
+            st.session_state.generation_count += 1
+            st.success(
+                f"Generated {len(st.session_state.flashcards)} flashcards "
+                f"and {len(st.session_state.mcqs)} quiz questions!"
+            )
+        except json.JSONDecodeError:
+            st.error("The AI response wasn't valid JSON. Try again — this happens occasionally.")
+        except Exception as e:
+            st.error(f"Something went wrong: {e}")
+            st.session_state.last_inputs = (uploaded_file, num_items)  # enables Retry button
 
 
 uploaded_file = st.file_uploader("Upload a PDF", type=["pdf"])
@@ -147,34 +196,14 @@ if st.button("Generate Study Material", type="primary"):
             "to keep the shared API key usable for everyone testing this)."
         )
     else:
-        with st.spinner("Reading PDF and generating flashcards + quiz... this can take up to a minute"):
-            try:
-                text = extract_text_from_pdf(uploaded_file)
-                if len(text.strip()) < 50:
-                    st.error(
-                        "Couldn't extract readable text from this PDF. "
-                        "It might be scanned/image-based rather than real text."
-                    )
-                else:
-                    result = generate_study_material(text, num_items, api_key)
+        st.session_state.last_inputs = None
+        run_generation(uploaded_file, num_items, api_key)
 
-                    for k in list(st.session_state.keys()):
-                        if k.startswith("quiz_q_"):
-                            del st.session_state[k]
-
-                    st.session_state.flashcards = result.get("flashcards", [])
-                    st.session_state.mcqs = result.get("mcqs", [])
-                    st.session_state.current_card = 0
-                    st.session_state.quiz_answers = {}
-                    st.session_state.generation_count += 1
-                    st.success(
-                        f"Generated {len(st.session_state.flashcards)} flashcards "
-                        f"and {len(st.session_state.mcqs)} quiz questions!"
-                    )
-            except json.JSONDecodeError:
-                st.error("The AI response wasn't valid JSON. Try again — this happens occasionally.")
-            except Exception as e:
-                st.error(f"Something went wrong: {e}")
+if st.session_state.last_inputs is not None:
+    if st.button("🔁 Retry last generation"):
+        retry_file, retry_num_items = st.session_state.last_inputs
+        st.session_state.last_inputs = None
+        run_generation(retry_file, retry_num_items, api_key)
 
 if st.session_state.flashcards or st.session_state.mcqs:
     st.divider()
