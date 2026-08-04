@@ -2,6 +2,7 @@ import streamlit as st
 import pypdf
 from google import genai
 from google.genai import errors as genai_errors
+from google.genai import types
 import json
 import time
 import concurrent.futures
@@ -60,7 +61,6 @@ def extract_text_from_pdf(uploaded_file, max_chars=15000):
 
 
 def generate_study_material(text, num_items, api_key):
-    client = genai.Client(api_key=api_key)
     prompt = f"""Based on the following study material, generate:
 1. Exactly {num_items} study cards. Each has a "question" (a topic or concept
    phrased as a question) and a "summary" — a clear, proper explanation of that
@@ -80,41 +80,46 @@ Return ONLY valid JSON, no other text before or after, in this exact structure:
 Study material:
 {text}
 """
-    # TEMP DEBUG SETTINGS
-    REQUEST_TIMEOUT_SECONDS = 60
-    max_attempts = 1
+    REQUEST_TIMEOUT_SECONDS = 30
+    max_attempts = 3
     last_error = None
     response = None
+    attempt = 0
     start = time.monotonic()
+
     for attempt in range(max_attempts):
+        client = genai.Client(api_key=api_key)
         try:
             future = st.session_state.executor.submit(
                 client.models.generate_content,
                 model="gemini-3.5-flash-lite",
                 contents=prompt,
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="minimal")
+                ),
             )
             response = future.result(timeout=REQUEST_TIMEOUT_SECONDS)
             break
-        except genai_errors.ServerError as e:
+        except (genai_errors.ServerError, concurrent.futures.TimeoutError) as e:
             last_error = e
+            st.session_state.executor.shutdown(wait=False, cancel_futures=True)
+            st.session_state.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
             if attempt < max_attempts - 1:
-                time.sleep(2 * (attempt + 1))
-        except concurrent.futures.TimeoutError as e:
-            last_error = e
-            if attempt < max_attempts - 1:
-                time.sleep(2 * (attempt + 1))
+                time.sleep(1)
         except Exception as e:
             last_error = e
             break
+
     elapsed = time.monotonic() - start
     if response is None:
         raise RuntimeError(
-            f"Gemini didn't respond in time, even after retrying. "
-            f"Elapsed: {elapsed:.1f}s. "
+            f"Gemini didn't respond after {max_attempts} attempts ({elapsed:.1f}s total). "
+            f"This looks like a known instability in Gemini's API under load, not a bug in "
+            f"this app — try again in a minute. "
             f"Underlying error: {type(last_error).__name__}: {last_error}"
         ) from last_error
 
-    st.sidebar.caption(f"Debug: generation took {elapsed:.1f}s")
+    st.sidebar.caption(f"Debug: generation took {elapsed:.1f}s, attempt {attempt + 1}")
     raw = response.text.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
@@ -142,7 +147,7 @@ if st.button("Generate Study Material", type="primary"):
             "to keep the shared API key usable for everyone testing this)."
         )
     else:
-        with st.spinner("Reading PDF and generating flashcards + quiz... this can take up to a minute on the free tier"):
+        with st.spinner("Reading PDF and generating flashcards + quiz... this can take up to a minute"):
             try:
                 text = extract_text_from_pdf(uploaded_file)
                 if len(text.strip()) < 50:
