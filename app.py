@@ -144,15 +144,6 @@ Study material:
     return json.loads(raw)
 
 
-def lock_quiz_answer(i, key):
-    if i in st.session_state.quiz_answers:
-        return
-    selected = st.session_state[key]
-    if selected == 0:
-        return  # placeholder — no real answer chosen yet
-    st.session_state.quiz_answers[i] = selected - 1  # shift back to real option index
-
-
 def run_generation(uploaded_file, num_items, api_key):
     with st.spinner("Reading PDF and generating flashcards + quiz... this can take up to a couple minutes"):
         try:
@@ -251,35 +242,26 @@ if st.session_state.flashcards or st.session_state.mcqs:
         else:
             for i, q in enumerate(mcqs):
                 st.markdown(f"**{i + 1}. {q['question']}**")
-                key = f"quiz_q_{i}"
                 is_locked = i in st.session_state.quiz_answers
 
-                # Real options shifted by 1; index 0 is a placeholder meaning
-                # "nothing chosen yet" so no option looks pre-selected.
-                display_options = ["— Choose an answer —"] + q["options"]
+                if not is_locked:
+                    for opt_idx, opt_text in enumerate(q["options"]):
+                        if st.button(opt_text, key=f"quiz_q_{i}_opt_{opt_idx}", use_container_width=True):
+                            st.session_state.quiz_answers[i] = opt_idx
+                else:
+                    selected = st.session_state.quiz_answers[i]
+                    for opt_idx, opt_text in enumerate(q["options"]):
+                        if opt_idx == q["correct_index"]:
+                            st.markdown(f"✅ **{opt_text}**")
+                        elif opt_idx == selected:
+                            st.markdown(f"❌ ~~{opt_text}~~")
+                        else:
+                            st.markdown(f"{opt_text}")
 
-                locked_value = st.session_state.quiz_answers.get(i)
-                default_index = (locked_value + 1) if locked_value is not None else 0
-
-                st.radio(
-                    "Choose one:",
-                    options=range(len(display_options)),
-                    format_func=lambda x, opts=display_options: opts[x],
-                    key=key,
-                    index=default_index,
-                    disabled=is_locked,
-                    on_change=lock_quiz_answer,
-                    args=(i, key),
-                    label_visibility="collapsed",
-                )
-
-                if is_locked:
-                    locked_answer = st.session_state.quiz_answers[i]
-                    if locked_answer == q["correct_index"]:
+                    if selected == q["correct_index"]:
                         st.success("Correct!")
                     else:
-                        correct_text = q["options"][q["correct_index"]]
-                        st.error(f"Not quite — correct answer: {correct_text}")
+                        st.error(f"Not quite — correct answer: {q['options'][q['correct_index']]}")
                 st.divider()
 
             answered = len(st.session_state.quiz_answers)
