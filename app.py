@@ -242,15 +242,16 @@ if st.session_state.flashcards or st.session_state.mcqs:
         else:
             def render_option_box(text, kind):
                 colors = {
-                    "correct": ("#d4edda", "#155724", "#a3d9b1"),
-                    "incorrect": ("#f8d7da", "#721c24", "#eda6ad"),
+                    "correct": ("#1e6b3c", "#ffffff", "#154d2b"),
+                    "incorrect": ("#8b2331", "#ffffff", "#6b1a25"),
                     "neutral": ("#f0f2f6", "#31333f", "#d5d8de"),
                 }
                 bg, fg, border = colors[kind]
                 st.markdown(
                     f"""<div style="background-color:{bg}; color:{fg};
                     border:1px solid {border}; border-radius:8px;
-                    padding:0.55rem 1rem; margin-bottom:0.5rem; font-size:1rem;">
+                    padding:0.55rem 1rem; margin-bottom:0.5rem; font-size:1rem;
+                    text-align:center;">
                     {text}</div>""",
                     unsafe_allow_html=True,
                 )
