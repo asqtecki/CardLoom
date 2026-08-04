@@ -200,9 +200,13 @@ if st.session_state.flashcards or st.session_state.mcqs:
                     disabled=is_locked,
                     label_visibility="collapsed",
                 )
-                if selected is not None:
+                if not is_locked and selected is not None:
                     st.session_state.quiz_answers[i] = selected
-                    if selected == q["correct_index"]:
+                    st.rerun()
+
+                if is_locked:
+                    locked_answer = st.session_state.quiz_answers[i]
+                    if locked_answer == q["correct_index"]:
                         st.success("Correct!")
                     else:
                         correct_text = q["options"][q["correct_index"]]
