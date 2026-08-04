@@ -80,12 +80,12 @@ Return ONLY valid JSON, no other text before or after, in this exact structure:
 Study material:
 {text}
 """
-    # TEMP DEBUG SETTINGS: shortened so we don't wait ~3 min to see the real error.
-    # Revert to 45 / 4 once we know what's actually failing.
-    REQUEST_TIMEOUT_SECONDS = 15
+    # TEMP DEBUG SETTINGS
+    REQUEST_TIMEOUT_SECONDS = 60
     max_attempts = 1
     last_error = None
     response = None
+    start = time.monotonic()
     for attempt in range(max_attempts):
         try:
             future = st.session_state.executor.submit(
@@ -104,17 +104,17 @@ Study material:
             if attempt < max_attempts - 1:
                 time.sleep(2 * (attempt + 1))
         except Exception as e:
-            # TEMP DEBUG: catch anything else too, so it's not silently
-            # falling outside these except blocks and surfacing as a
-            # generic unrelated error.
             last_error = e
             break
+    elapsed = time.monotonic() - start
     if response is None:
         raise RuntimeError(
             f"Gemini didn't respond in time, even after retrying. "
+            f"Elapsed: {elapsed:.1f}s. "
             f"Underlying error: {type(last_error).__name__}: {last_error}"
         ) from last_error
 
+    st.sidebar.caption(f"Debug: generation took {elapsed:.1f}s")
     raw = response.text.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
     return json.loads(raw)
@@ -142,7 +142,7 @@ if st.button("Generate Study Material", type="primary"):
             "to keep the shared API key usable for everyone testing this)."
         )
     else:
-        with st.spinner("Reading PDF and generating flashcards + quiz... this can take 10-20 seconds"):
+        with st.spinner("Reading PDF and generating flashcards + quiz... this can take up to a minute on the free tier"):
             try:
                 text = extract_text_from_pdf(uploaded_file)
                 if len(text.strip()) < 50:
