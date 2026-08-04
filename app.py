@@ -7,9 +7,11 @@ import json
 import time
 import concurrent.futures
 
-st.set_page_config(page_title="Flashcard Generator", page_icon="📚", layout="centered")
+st.set_page_config(page_title="CardLoomDRV", page_icon="drv_logo.png", layout="centered")
 
-st.title("📚 Flashcard Generator")
+st.logo("drv_logo.png", size="large")
+
+st.title("CardLoomDRV")
 st.caption("Upload lecture notes or a textbook PDF, get flashcards and a quiz to study from.")
 
 try:
