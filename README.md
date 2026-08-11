@@ -1,4 +1,4 @@
-# 📚 Flashcard Generator
+# 📚 CardLoom
 
 Upload a PDF (lecture notes, textbook chapter, etc.) and get back AI-generated flashcards and a MCQs quiz to study from. 
 Built with Streamlit and Google's Gemini API.
