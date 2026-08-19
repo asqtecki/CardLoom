@@ -7,7 +7,7 @@ import json
 import time
 import concurrent.futures
 
-st.set_page_config(page_title="CardLoom DRV", page_icon="📚", layout="centered")
+st.set_page_config(page_title="CardLoom", page_icon="📚", layout="centered")
 
 st.title("📚 CardLoom")
 st.caption("Upload lecture notes or a textbook PDF, get flashcards and a quiz to study from.")
